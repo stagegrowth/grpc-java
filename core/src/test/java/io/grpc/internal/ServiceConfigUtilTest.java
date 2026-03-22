@@ -19,7 +19,10 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
+import io.grpc.internal.RetriableStream.Throttle;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.Test;
@@ -112,6 +115,68 @@ public class ServiceConfigUtilTest {
     } catch (Exception e) {
       assertThat(e).hasMessageThat().contains("is not object");
     }
+  }
+
+  @Test
+  public void getThrottlePolicy_maxTokensMissing() throws Exception {
+    Map<String, Object> throttling = new HashMap<>();
+    throttling.put("tokenRatio", 0.1);
+    Map<String, Object> serviceConfig = new HashMap<>();
+    serviceConfig.put("retryThrottling", throttling);
+    try {
+      ServiceConfigUtil.getThrottlePolicy(serviceConfig);
+      fail("Should throw");
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("maxTokens");
+    }
+  }
+
+  @Test
+  public void getThrottlePolicy_tokenRatioMissing() throws Exception {
+    Map<String, Object> throttling = new HashMap<>();
+    throttling.put("maxTokens", 10.0);
+    Map<String, Object> serviceConfig = new HashMap<>();
+    serviceConfig.put("retryThrottling", throttling);
+    try {
+      ServiceConfigUtil.getThrottlePolicy(serviceConfig);
+      fail("Should throw");
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("tokenRatio");
+    }
+  }
+
+  @Test
+  public void getThrottlePolicy_bothFieldsMissing() throws Exception {
+    Map<String, Object> serviceConfig = new HashMap<>();
+    serviceConfig.put("retryThrottling", Collections.emptyMap());
+    try {
+      ServiceConfigUtil.getThrottlePolicy(serviceConfig);
+      fail("Should throw");
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("maxTokens");
+    }
+  }
+
+  @Test
+  public void getThrottlePolicy_validConfig() throws Exception {
+    Map<String, Object> throttling = new HashMap<>();
+    throttling.put("maxTokens", 10.0);
+    throttling.put("tokenRatio", 0.1);
+    Map<String, Object> serviceConfig = new HashMap<>();
+    serviceConfig.put("retryThrottling", throttling);
+    Throttle throttle = ServiceConfigUtil.getThrottlePolicy(serviceConfig);
+    assertThat(throttle).isEqualTo(new Throttle(10f, 0.1f));
+  }
+
+  @Test
+  public void getThrottlePolicy_nullServiceConfig() {
+    assertThat(ServiceConfigUtil.getThrottlePolicy(null)).isNull();
+  }
+
+  @Test
+  public void getThrottlePolicy_noRetryThrottling() throws Exception {
+    Map<String, Object> serviceConfig = new HashMap<>();
+    assertThat(ServiceConfigUtil.getThrottlePolicy(serviceConfig)).isNull();
   }
 
   @SuppressWarnings("unchecked")
